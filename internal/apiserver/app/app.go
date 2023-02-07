@@ -17,24 +17,24 @@ var (
 	ctx context.Context
 )
 
-func InitDB(cfg config.Config) (*mongo.Client, error) {
+func initMongoDB(cfg config.Config) (*mongo.Client, error) {
 	mongoConn := options.Client().ApplyURI(cfg.DBUri)
 	mongoClient, err := mongo.Connect(ctx, mongoConn)
 
 	if err != nil {
 		return nil, err
 	}
-	fmt.Println(123)
+
 	if err := mongoClient.Ping(ctx, readpref.Primary()); err != nil {
 		return nil, err
 	}
 
-	fmt.Println("MongoDB connected successfully...")
+	fmt.Println("MongoDB successfully connected...")
 
 	return mongoClient, nil
 }
 
-func InitRedis(cfg config.Config) (*redis.Client, error) {
+func initRedis(cfg config.Config) (*redis.Client, error) {
 	redisClient := redis.NewClient(&redis.Options{
 		Addr: cfg.RedisUri,
 	})
@@ -43,40 +43,37 @@ func InitRedis(cfg config.Config) (*redis.Client, error) {
 		return nil, err
 	}
 
-	err := redisClient.Set(ctx, "test", "Welcome to Goland with MongoDB and Redis", 0).Err()
+	err := redisClient.Set(ctx, "test", "Welcome to Goland with Redis and MongoDB", 0).Err()
 	if err != nil {
 		return nil, err
 	}
 
-	fmt.Println("Redis connected successfully...")
-	return redisClient, nil
+	fmt.Println("Redis client connected successfully...")
+	return redisClient, err
 }
 
 func Run() {
+	ctx = context.TODO()
 	cfg, err := config.LoadConfig(".")
 	if err != nil {
 		log.Fatal("Could not load environment variables")
 	}
 
-	ctx = context.TODO()
-
-	mongoClient, err := InitDB(cfg)
+	mongoClient, err := initMongoDB(cfg)
 	if err != nil {
-		log.Fatalf("Could not connect to DB: %s", err)
+		panic(err)
 	}
-
 	defer mongoClient.Disconnect(ctx)
 
-	redisClient, err := InitRedis(cfg)
+	redisClient, err := initRedis(cfg)
 	if err != nil {
-		log.Fatalf("Could not connect to Redis: %s", err)
+		panic(err)
 	}
-
 	value, err := redisClient.Get(ctx, "test").Result()
 	if err == redis.Nil {
 		fmt.Println("key: test does not exist")
 	} else if err != nil {
-		log.Fatalf("Error on parsing data from redis: %s", err)
+		panic(err)
 	}
 
 	server := gin.Default()
@@ -84,5 +81,6 @@ func Run() {
 	router.GET("/healthchecker", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "success", "message": value})
 	})
+
 	log.Fatal(server.Run(fmt.Sprintf(":%s", cfg.Port)))
 }
